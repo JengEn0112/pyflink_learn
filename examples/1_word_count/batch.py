@@ -22,19 +22,13 @@ https://ci.apache.org/projects/flink/flink-docs-master/dev/table/common.html#mai
 
 import os
 import shutil
-from pyflink.table import BatchTableEnvironment, EnvironmentSettings
-from pyflink.table import DataTypes
-from pyflink.table.descriptors import Schema, OldCsv, FileSystem
+from pyflink.table import TableEnvironment, EnvironmentSettings, DataTypes, Schema, TableDescriptor, FormatDescriptor
 
 # ########################### 初始化批处理环境 ###########################
 
-# 创建 Blink 批处理环境
-env_settings = EnvironmentSettings.new_instance().in_batch_mode().use_blink_planner().build()
-t_env = BatchTableEnvironment.create(environment_settings=env_settings)
-
 # 创建 Flink 批处理环境
-# env_settings = EnvironmentSettings.new_instance().in_batch_mode().use_old_planner().build()
-# t_env = BatchTableEnvironment.create(environment_settings=env_settings)
+env_settings = EnvironmentSettings.new_instance().in_batch_mode().build()
+t_env = TableEnvironment.create(environment_settings=env_settings)
 
 # ########################### 创建源表(source) ###########################
 # source 指数据源，即待处理的数据流的源头，这里使用同级目录下的 word.csv，实际中可能来自于 MySQL、Kafka、Hive 等
@@ -54,6 +48,18 @@ t_env.execute_sql(f"""
 """)
 
 # 基于 Table API
+# t_env.create_temporary_table(
+#     'source',
+#     TableDescriptor.for_connector('filesystem')
+#         .schema(Schema.new_builder()
+#                 .column('id', DataTypes.BIGINT())
+#                 .column('word', DataTypes.STRING())
+#                 .build())
+#         .option('path', dir_word)
+#         .format("csv")
+#         .build()
+# )
+
 # t_env.connect(FileSystem().path(dir_word)) \
 #     .with_format(OldCsv()
 #                  .field('id', DataTypes.BIGINT())
@@ -66,7 +72,7 @@ t_env.execute_sql(f"""
 # 查看数据
 # t_env.from_path('source').print_schema()  # 查看 schema
 # t_env.from_path('source').to_pandas()  # 转为 pandas.DataFrame
-
+# print(table)
 # ########################### 创建结果表(sink) ###########################
 # sink 指发送数据，即待处理的数据流的出口，这里使用同级目录下的 result.csv，实际中可能会把处理好的数据存到 MySQL、Kafka、Hive 等
 
@@ -91,7 +97,7 @@ t_env.execute_sql(f"""
     )
 """)
 
-# 基于 SQL API
+# 基于 table API
 # t_env.connect(FileSystem().path(dir_result)) \
 #     .with_format(OldCsv()
 #                  .field('word', DataTypes.STRING())
@@ -104,13 +110,13 @@ t_env.execute_sql(f"""
 # ########################### 批处理任务 ###########################
 
 # 基于 SQL API
-t_env.sql_query("""
-    SELECT word
-           , count(1) AS cnt
+t_env.execute_sql("""
+    INSERT INTO sink
+    SELECT word, 
+            count(1) AS cnt
     FROM source
     GROUP BY word
-""").insert_into('sink')
-t_env.execute('t')
+""").wait()
 
 # 基于 table API
 # t_env.from_path('source') \
